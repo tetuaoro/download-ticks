@@ -25,7 +25,7 @@ enum Interval {
 }
 
 /// Command-line arguments for the program.
-#[derive(Debug, Parser)]
+#[derive(Debug, Clone, Parser)]
 #[command(
     version,
     about,
@@ -36,10 +36,10 @@ and optional start/end dates. The data is saved to a JSON file if --output-file 
 
 Examples:
   Fetch 1-hour BTCUSDT klines for the last 1000 hours:
-    $ download-ticks -s BTCUSDT -i H1
+    $ download-ticks -s BTCUSDT -i h1
 
   Fetch 1-minute BTCUSDT klines from Jan 1, 2019, to Mar 1, 2019, and save to output.json:
-    $ download-ticks -s BTCUSDT -i M1 --from-date '2019-01-01T00:00:00Z' --to-date '2019-03-01T00:00:00Z' -o output.json
+    $ download-ticks -s BTCUSDT -i m1 --from-date '2019-01-01T00:00:00Z' --to-date '2019-03-01T00:00:00Z' -o output.json
 "
 )]
 struct Command {
@@ -62,6 +62,10 @@ struct Command {
     /// Output file path to save the klines in JSON format.
     #[arg(short, long)]
     output_file: Option<PathBuf>,
+
+    /// Print progress status.Usefull if you get `from` and `to` dates.
+    #[arg(short, long)]
+    verbose: bool,
 }
 
 /// Represents a single candlestick (kline) from Binance.
@@ -101,7 +105,7 @@ const BASE_URL: &str = "https://api.binance.com/api/v3/klines";
 /// # Arguments
 /// * `start` - Start date of the range.
 /// * `end` - End date of the range.
-/// * `interval` - The time interval (M1, H1, D1).
+/// * `interval` - The time interval (m1, h1, d1).
 ///
 /// # Returns
 /// A vector of tuples `(start, end)` representing the split intervals.
@@ -130,6 +134,15 @@ fn split_intervals(
     intervals
 }
 
+fn write_data_to_file(output_file: Option<PathBuf>, klines: &Vec<Kline>) -> Result<()> {
+    if let Some(path) = output_file {
+        let file = File::create(&path)?;
+        to_writer(file, &klines)?;
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let cmd = Command::parse();
@@ -148,6 +161,9 @@ async fn main() -> Result<()> {
         let url_cloned = url.clone();
         let intervals = split_intervals(start, end, &cmd.interval);
 
+        let intervals_len = intervals.len();
+        let mut progress = 1;
+
         for (start, end) in intervals {
             url = format!(
                 "{url_cloned}&startTime={}&endTime={}",
@@ -157,16 +173,22 @@ async fn main() -> Result<()> {
             let response = reqwest::get(url).await?;
             let mut data = response.json::<Vec<Kline>>().await?;
             klines.append(&mut data);
+
+            let _cmd = cmd.clone();
+
+            _ = write_data_to_file(_cmd.output_file, &klines);
+
+            if _cmd.verbose {
+                let percent = progress as f64 * 100.0 / intervals_len as f64;
+                println!("{progress}/{intervals_len} ({percent:.3}%)");
+                progress += 1;
+            }
         }
     } else {
         let response = reqwest::get(url).await?;
         let mut data = response.json::<Vec<Kline>>().await?;
         klines.append(&mut data);
-    }
-
-    if let Some(path) = cmd.output_file {
-        let file = File::create(&path)?;
-        to_writer(file, &klines)?;
+        _ = write_data_to_file(cmd.output_file, &klines);
     }
 
     Ok(())
