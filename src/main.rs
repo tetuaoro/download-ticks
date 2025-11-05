@@ -4,14 +4,17 @@
 //! split the time range into chunks (to respect Binance's 1000-candle limit),
 //! and save the results to a JSON file.
 
-use std::{fs::File, path::PathBuf};
+mod utils;
+
+use std::path::PathBuf;
 
 use anyhow::Result;
-use chrono::{DateTime, Duration, Utc, serde::ts_microseconds};
+use chrono::{DateTime, Utc, serde::ts_microseconds};
 use clap::{Parser, ValueEnum};
 use serde::{Deserialize, Serialize};
-use serde_json::to_writer;
 use serde_this_or_that::as_f64;
+
+use crate::utils::*;
 
 /// Supported time intervals for Binance klines.
 #[derive(Debug, Clone, ValueEnum)]
@@ -100,49 +103,6 @@ struct Kline {
 /// Base URL for API endpoint.
 const BASE_URL: &str = "https://api.binance.com/api/v3/klines";
 
-/// Splits a time range into intervals suitable for Binance's API (max 1000 candles per request).
-///
-/// # Arguments
-/// * `start` - Start date of the range.
-/// * `end` - End date of the range.
-/// * `interval` - The time interval (m1, h1, d1).
-///
-/// # Returns
-/// A vector of tuples `(start, end)` representing the split intervals.
-fn split_intervals(
-    start: DateTime<Utc>,
-    end: DateTime<Utc>,
-    interval: &Interval,
-) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
-    let mut intervals = Vec::new();
-    let mut current_start = start;
-
-    // maximum duration for 1000 candles, based on the interval.
-    // also return the interval duration to increment `current_start`.
-    let (max_duration, plus_duration) = match interval {
-        Interval::M1 => (Duration::minutes(1000), Duration::minutes(1)),
-        Interval::H1 => (Duration::hours(1000), Duration::hours(1)),
-        Interval::D1 => (Duration::days(1000), Duration::days(1)),
-    };
-
-    while current_start < end {
-        let current_end = std::cmp::min(current_start + max_duration, end);
-        intervals.push((current_start, current_end));
-        current_start = current_end + plus_duration; // avoid overlapping
-    }
-
-    intervals
-}
-
-fn write_data_to_file(output_file: Option<PathBuf>, klines: &Vec<Kline>) -> Result<()> {
-    if let Some(path) = output_file {
-        let file = File::create(&path)?;
-        to_writer(file, &klines)?;
-    }
-
-    Ok(())
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
     let cmd = Command::parse();
@@ -170,13 +130,18 @@ async fn main() -> Result<()> {
                 start.timestamp_micros(),
                 end.timestamp_micros()
             );
+
             let response = reqwest::get(url).await?;
             let mut data = response.json::<Vec<Kline>>().await?;
             klines.append(&mut data);
 
             let _cmd = cmd.clone();
 
-            _ = write_data_to_file(_cmd.output_file, &klines);
+            if let Some(path) = _cmd.output_file {
+                if let Err(e) = write_data_to_file(path, &klines) {
+                    eprintln!("{e}");
+                }
+            }
 
             if _cmd.verbose {
                 let percent = progress as f64 * 100.0 / intervals_len as f64;
@@ -188,7 +153,12 @@ async fn main() -> Result<()> {
         let response = reqwest::get(url).await?;
         let mut data = response.json::<Vec<Kline>>().await?;
         klines.append(&mut data);
-        _ = write_data_to_file(cmd.output_file, &klines);
+    }
+
+    if let Some(path) = cmd.output_file {
+        if let Err(e) = write_data_to_file(path, &klines) {
+            eprintln!("{e}");
+        }
     }
 
     Ok(())
