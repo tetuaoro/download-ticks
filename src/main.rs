@@ -66,6 +66,10 @@ struct Command {
     #[arg(short, long)]
     output_file: Option<PathBuf>,
 
+    /// Re-try to get ticks from marketplace.
+    #[arg(short, long, default_value = "3")]
+    retry_counter: u8,
+
     /// Print progress status.Usefull if you get `from` and `to` dates.
     #[arg(short, long)]
     verbose: bool,
@@ -131,11 +135,11 @@ async fn main() -> Result<()> {
                 end.timestamp_micros()
             );
 
-            let response = reqwest::get(url).await?;
+            let _cmd = cmd.clone();
+
+            let response = fetch_url(&url, _cmd.retry_counter, 3).await?;
             let mut data = response.json::<Vec<Kline>>().await?;
             klines.append(&mut data);
-
-            let _cmd = cmd.clone();
 
             if let Some(path) = _cmd.output_file {
                 if let Err(e) = write_data_to_file(path, &klines) {
@@ -150,7 +154,7 @@ async fn main() -> Result<()> {
             }
         }
     } else {
-        let response = reqwest::get(url).await?;
+        let response = fetch_url(&url, cmd.retry_counter, 3).await?;
         let mut data = response.json::<Vec<Kline>>().await?;
         klines.append(&mut data);
     }

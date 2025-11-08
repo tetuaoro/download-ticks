@@ -46,3 +46,39 @@ pub(crate) fn write_data_to_file(path: PathBuf, klines: &[Kline]) -> Result<()> 
 
     Ok(())
 }
+
+/// Asynchronously fetches a URL with configurable retry logic.
+///
+/// This function attempts to send a GET request to the specified URL.
+/// If the request fails, it will retry up to `retry` times, pausing for `pause` seconds between each attempt.
+///
+/// # Arguments
+///
+/// * `url` - A string slice that holds the URL to fetch.
+/// * `retry` - The maximum number of retry attempts if the request fails.
+/// * `pause` - The delay in seconds between retry attempts.
+///
+/// # Returns
+///
+/// * `Ok(reqwest::Response)` - If the request succeeds within the allowed retries.
+/// * `Err(reqwest::Error)` - If all retry attempts fail, returns the last encountered error.
+pub(crate) async fn fetch_url(
+    url: &str,
+    retry: u8,
+    pause: u64,
+) -> Result<reqwest::Response, reqwest::Error> {
+    let mut last_error = None;
+
+    for attempt in 1..=retry {
+        match reqwest::get(url).await {
+            Ok(response) => return Ok(response),
+            Err(e) => {
+                last_error = Some(e);
+                eprintln!("Attempt to retry {attempt}/{retry}");
+                tokio::time::sleep(tokio::time::Duration::from_secs(pause)).await;
+            }
+        }
+    }
+
+    Err(last_error.unwrap())
+}
