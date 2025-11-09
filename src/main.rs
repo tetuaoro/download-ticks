@@ -4,16 +4,16 @@
 //! split the time range into chunks (to respect Binance's 1000-candle limit),
 //! and save the results to a JSON file.
 
+mod data;
 mod utils;
 
 use std::path::PathBuf;
 
 use anyhow::Result;
-use chrono::{DateTime, Utc, serde::ts_microseconds};
+use chrono::{DateTime, Duration, Utc};
 use clap::{Parser, ValueEnum};
-use serde::{Deserialize, Serialize};
-use serde_this_or_that::as_f64;
 
+use crate::data::*;
 use crate::utils::*;
 
 /// Supported time intervals for Binance klines.
@@ -75,35 +75,6 @@ struct Command {
     verbose: bool,
 }
 
-/// Represents a single candlestick (kline) from Binance.
-#[derive(Debug, Serialize, Deserialize)]
-struct Kline {
-    #[serde(rename(deserialize = "0"), with = "ts_microseconds")]
-    open_time: DateTime<Utc>,
-    #[serde(rename(deserialize = "1"), deserialize_with = "as_f64")]
-    open_price: f64,
-    #[serde(rename(deserialize = "2"), deserialize_with = "as_f64")]
-    high_price: f64,
-    #[serde(rename(deserialize = "3"), deserialize_with = "as_f64")]
-    low_price: f64,
-    #[serde(rename(deserialize = "4"), deserialize_with = "as_f64")]
-    close_price: f64,
-    #[serde(rename(deserialize = "5"), deserialize_with = "as_f64")]
-    volume: f64,
-    #[serde(rename(deserialize = "6"), with = "ts_microseconds")]
-    close_time: DateTime<Utc>,
-    #[serde(rename(deserialize = "7"), deserialize_with = "as_f64")]
-    quote_asset_volume: f64,
-    #[serde(rename(deserialize = "8"))]
-    number_of_trades: u64,
-    #[serde(rename(deserialize = "9"), deserialize_with = "as_f64")]
-    taker_buy_base_volume: f64,
-    #[serde(rename(deserialize = "10"), deserialize_with = "as_f64")]
-    taker_buy_quote_volume: f64,
-    #[serde(rename(deserialize = "11"), deserialize_with = "as_f64")]
-    ignore: f64,
-}
-
 /// Base URL for API endpoint.
 const BASE_URL: &str = "https://api.binance.com/api/v3/klines";
 
@@ -121,8 +92,31 @@ async fn main() -> Result<()> {
     let mut url = format!("{BASE_URL}?{symbol}&{interval}");
     let mut klines = vec![];
 
-    if let (Some(start), Some(end)) = (cmd.from_date, cmd.to_date) {
+    if let Some(path) = cmd.output_file.clone() {
+        if let Ok(k) = read_data_from_file(path) {
+            klines = k;
+        }
+    }
+
+    if let (Some(mut start), Some(end)) = (cmd.from_date, cmd.to_date) {
         let url_cloned = url.clone();
+
+        if let Some(path) = cmd.output_file.clone() {
+            if let Ok(last_close_time) = get_last_close_time_from_file(path) {
+                let plus_duration = match cmd.interval {
+                    Interval::M1 => Duration::minutes(1),
+                    Interval::H1 => Duration::hours(1),
+                    Interval::D1 => Duration::days(1),
+                };
+
+                start = last_close_time + plus_duration;
+
+                if cmd.verbose {
+                    println!("start from last close time {last_close_time} => {start}");
+                }
+            }
+        }
+
         let intervals = split_intervals(start, end, &cmd.interval);
 
         let intervals_len = intervals.len();
@@ -135,19 +129,17 @@ async fn main() -> Result<()> {
                 end.timestamp_micros()
             );
 
-            let _cmd = cmd.clone();
-
-            let response = fetch_url(&url, _cmd.retry_counter, 3).await?;
+            let response = fetch_url(&url, cmd.retry_counter, 3).await?;
             let mut data = response.json::<Vec<Kline>>().await?;
             klines.append(&mut data);
 
-            if let Some(path) = _cmd.output_file {
+            if let Some(path) = cmd.output_file.clone() {
                 if let Err(e) = write_data_to_file(path, &klines) {
                     eprintln!("{e}");
                 }
             }
 
-            if _cmd.verbose {
+            if cmd.verbose {
                 let percent = progress as f64 * 100.0 / intervals_len as f64;
                 println!("{progress}/{intervals_len} ({percent:.3}%)");
                 progress += 1;
@@ -157,11 +149,10 @@ async fn main() -> Result<()> {
         let response = fetch_url(&url, cmd.retry_counter, 3).await?;
         let mut data = response.json::<Vec<Kline>>().await?;
         klines.append(&mut data);
-    }
-
-    if let Some(path) = cmd.output_file {
-        if let Err(e) = write_data_to_file(path, &klines) {
-            eprintln!("{e}");
+        if let Some(path) = cmd.output_file {
+            if let Err(e) = write_data_to_file(path, &klines) {
+                eprintln!("{e}");
+            }
         }
     }
 

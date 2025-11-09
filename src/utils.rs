@@ -1,10 +1,10 @@
-use std::{fs::File, path::PathBuf};
+use std::{fs::File, io::BufReader, path::PathBuf};
 
 use anyhow::Result;
 use chrono::{DateTime, Duration, Utc};
-use serde_json::to_writer;
+use serde_json::{from_reader, to_writer};
 
-use crate::{Interval, Kline};
+use crate::{Data, Interval, Kline};
 
 /// Splits a time range into intervals suitable for Binance's API (max 1000 candles per request).
 ///
@@ -38,6 +38,25 @@ pub(crate) fn split_intervals(
     }
 
     intervals
+}
+
+/// Reads the last candlestick's close time from a file containing serialized Kline data.
+pub(crate) fn read_data_from_file(path: PathBuf) -> Result<Vec<Kline>> {
+    let file = File::open(&path)?;
+    let reader = BufReader::new(file);
+    let data = from_reader::<_, Vec<Data>>(reader)?;
+    let klines = data.into_iter().map(Into::into).collect();
+
+    Ok(klines)
+}
+
+/// This function is useful for resuming operations from the last saved point in case of errors.
+pub(crate) fn get_last_close_time_from_file(path: PathBuf) -> Result<DateTime<Utc>> {
+    let klines = read_data_from_file(path)?;
+    klines
+        .last()
+        .map(|kline| kline.close_time())
+        .ok_or(anyhow::Error::msg("file is empty"))
 }
 
 pub(crate) fn write_data_to_file(path: PathBuf, klines: &[Kline]) -> Result<()> {
