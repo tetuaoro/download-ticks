@@ -1,21 +1,53 @@
-use chrono::{
-    DateTime, Utc,
-    serde::{ts_microseconds, ts_milliseconds},
-};
+use chrono::{DateTime, Utc, serde::ts_microseconds};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_f64;
+
+mod timestamp {
+    use super::*;
+    use serde::de::{Error, Visitor};
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        struct TimestampVisitor;
+
+        impl<'de> Visitor<'de> for TimestampVisitor {
+            type Value = DateTime<Utc>;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("a timestamp in nanoseconds or milliseconds")
+            }
+
+            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                if let Ok(ts) = DateTime::<Utc>::from_timestamp_millis(value as i64)
+                    .ok_or(E::custom("invalid milliseconds timestamp"))
+                {
+                    return Ok(ts);
+                }
+
+                Ok(DateTime::<Utc>::from_timestamp_nanos(value as i64))
+            }
+        }
+
+        deserializer.deserialize_u64(TimestampVisitor)
+    }
+}
 
 /// Represents `Kline`. Use to read from file.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Data {
-    #[serde(with = "ts_milliseconds")]
+    #[serde(deserialize_with = "timestamp::deserialize")]
     open_time: DateTime<Utc>,
     open_price: f64,
     high_price: f64,
     low_price: f64,
     close_price: f64,
     volume: f64,
-    #[serde(with = "ts_milliseconds")]
+    #[serde(deserialize_with = "timestamp::deserialize")]
     close_time: DateTime<Utc>,
     quote_asset_volume: f64,
     number_of_trades: u64,

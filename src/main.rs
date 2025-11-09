@@ -93,13 +93,15 @@ async fn main() -> Result<()> {
     let mut klines = vec![];
 
     if let Some(path) = cmd.output_file.clone() {
-        if let Ok(k) = read_data_from_file(path) {
-            let n = k.len();
-            klines = k;
-
-            if cmd.verbose {
-                println!("len of previous data: {n}");
+        match read_data_from_file(path) {
+            Ok(k) => {
+                let n = k.len();
+                klines = k;
+                if cmd.verbose {
+                    println!("len of previous data: {n}");
+                }
             }
+            Err(e) => eprintln!("{e}"),
         }
     }
 
@@ -107,18 +109,21 @@ async fn main() -> Result<()> {
         let url_cloned = url.clone();
 
         if let Some(path) = cmd.output_file.clone() {
-            if let Ok(last_close_time) = get_last_close_time_from_file(path) {
-                let plus_duration = match cmd.interval {
-                    Interval::M1 => Duration::minutes(1),
-                    Interval::H1 => Duration::hours(1),
-                    Interval::D1 => Duration::days(1),
-                };
+            match get_last_close_time_from_file(path) {
+                Ok(last_close_time) => {
+                    let plus_duration = match cmd.interval {
+                        Interval::M1 => Duration::minutes(1),
+                        Interval::H1 => Duration::hours(1),
+                        Interval::D1 => Duration::days(1),
+                    };
 
-                start = last_close_time + plus_duration;
+                    start = last_close_time + plus_duration;
 
-                if cmd.verbose {
-                    println!("start from last close time {last_close_time} => {start}");
+                    if cmd.verbose {
+                        println!("start from last close time {last_close_time} => {start}");
+                    }
                 }
+                Err(e) => eprintln!("{e}"),
             }
         }
 
