@@ -94,7 +94,12 @@ async fn main() -> Result<()> {
 
     if let Some(path) = cmd.output_file.clone() {
         if let Ok(k) = read_data_from_file(path) {
+            let n = k.len();
             klines = k;
+
+            if cmd.verbose {
+                println!("len of previous data: {n}");
+            }
         }
     }
 
