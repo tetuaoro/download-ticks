@@ -7,6 +7,7 @@
 mod data;
 mod utils;
 
+use std::fmt;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -25,6 +26,16 @@ enum Interval {
     H1,
     /// 1 day
     D1,
+}
+
+impl fmt::Display for Interval {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Interval::M1 => write!(f, "1m"),
+            Interval::H1 => write!(f, "1h"),
+            Interval::D1 => write!(f, "1d"),
+        }
+    }
 }
 
 /// Command-line arguments for the program.
@@ -83,25 +94,18 @@ async fn main() -> Result<()> {
     let cmd = Command::parse();
 
     let symbol = format!("symbol={}", cmd.symbol);
-    let interval = match cmd.interval {
-        Interval::M1 => "interval=1m",
-        Interval::H1 => "interval=1h",
-        Interval::D1 => "interval=1d",
-    };
+    let interval = format!("interval={}", cmd.interval);
 
-    let mut url = format!("{BASE_URL}?{symbol}&{interval}");
+    let mut url = format!("{BASE_URL}?{symbol}&{interval}&limit=1000");
     let mut klines = vec![];
 
     if let Some(path) = cmd.output_file.clone() {
-        match read_data_from_file(path) {
-            Ok(k) => {
-                let n = k.len();
-                klines = k;
-                if cmd.verbose {
-                    println!("len of previous data: {n}");
-                }
+        if let Ok(k) = read_data_from_file(path) {
+            let n = k.len();
+            klines = k;
+            if cmd.verbose {
+                println!("len of previous data: {n}");
             }
-            Err(e) => eprintln!("{e}"),
         }
     }
 
@@ -109,35 +113,25 @@ async fn main() -> Result<()> {
         let url_cloned = url.clone();
 
         if let Some(path) = cmd.output_file.clone() {
-            match get_last_close_time_from_file(path) {
-                Ok(last_close_time) => {
-                    let plus_duration = match cmd.interval {
-                        Interval::M1 => Duration::minutes(1),
-                        Interval::H1 => Duration::hours(1),
-                        Interval::D1 => Duration::days(1),
-                    };
-
-                    start = last_close_time + plus_duration;
-
-                    if cmd.verbose {
-                        println!("start from last close time {last_close_time} => {start}");
-                    }
+            if let Ok(last_close_time) = get_last_close_time_from_file(path) {
+                let plus_duration = match cmd.interval {
+                    Interval::M1 => Duration::minutes(1),
+                    Interval::H1 => Duration::hours(1),
+                    Interval::D1 => Duration::days(1),
+                };
+                start = last_close_time + plus_duration;
+                if cmd.verbose {
+                    println!("start from last close time {last_close_time} => {start}");
                 }
-                Err(e) => eprintln!("{e}"),
             }
         }
 
         let intervals = split_intervals(start, end, &cmd.interval);
-
         let intervals_len = intervals.len();
         let mut progress = 1;
 
         for (start, end) in intervals {
-            url = format!(
-                "{url_cloned}&startTime={}&endTime={}",
-                start.timestamp_micros(),
-                end.timestamp_micros()
-            );
+            url = format!("{url_cloned}&startTime={}&endTime={}", start.timestamp_micros(), end.timestamp_micros());
 
             let response = fetch_url(&url, cmd.retry_counter, 3).await?;
             let mut data = response.json::<Vec<Kline>>().await?;

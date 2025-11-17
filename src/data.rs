@@ -1,53 +1,18 @@
-use chrono::{DateTime, Utc, serde::ts_microseconds};
+use chrono::{DateTime, Utc, serde::ts_milliseconds};
 use serde::{Deserialize, Serialize};
 use serde_this_or_that::as_f64;
-
-mod timestamp {
-    use super::*;
-    use serde::de::{Error, Visitor};
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<DateTime<Utc>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        struct TimestampVisitor;
-
-        impl<'de> Visitor<'de> for TimestampVisitor {
-            type Value = DateTime<Utc>;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("a timestamp in nanoseconds or milliseconds")
-            }
-
-            fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
-            where
-                E: Error,
-            {
-                if let Ok(ts) = DateTime::<Utc>::from_timestamp_millis(value as i64)
-                    .ok_or(E::custom("invalid milliseconds timestamp"))
-                {
-                    return Ok(ts);
-                }
-
-                Ok(DateTime::<Utc>::from_timestamp_nanos(value as i64))
-            }
-        }
-
-        deserializer.deserialize_u64(TimestampVisitor)
-    }
-}
 
 /// Represents `Kline`. Use to read from file.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Data {
-    #[serde(deserialize_with = "timestamp::deserialize")]
+    #[serde(with = "ts_milliseconds")]
     open_time: DateTime<Utc>,
     open_price: f64,
     high_price: f64,
     low_price: f64,
     close_price: f64,
     volume: f64,
-    #[serde(deserialize_with = "timestamp::deserialize")]
+    #[serde(with = "ts_milliseconds")]
     close_time: DateTime<Utc>,
     quote_asset_volume: f64,
     number_of_trades: u64,
@@ -78,7 +43,7 @@ impl Into<Kline> for Data {
 /// Represents a single candlestick (kline) from Binance.
 #[derive(Debug, Serialize, Deserialize)]
 pub(crate) struct Kline {
-    #[serde(rename(deserialize = "0"), with = "ts_microseconds")]
+    #[serde(rename(deserialize = "0"), with = "ts_milliseconds")]
     open_time: DateTime<Utc>,
     #[serde(rename(deserialize = "1"), deserialize_with = "as_f64")]
     open_price: f64,
@@ -90,7 +55,7 @@ pub(crate) struct Kline {
     close_price: f64,
     #[serde(rename(deserialize = "5"), deserialize_with = "as_f64")]
     volume: f64,
-    #[serde(rename(deserialize = "6"), with = "ts_microseconds")]
+    #[serde(rename(deserialize = "6"), with = "ts_milliseconds")]
     close_time: DateTime<Utc>,
     #[serde(rename(deserialize = "7"), deserialize_with = "as_f64")]
     quote_asset_volume: f64,

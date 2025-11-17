@@ -15,11 +15,7 @@ use crate::{Data, Interval, Kline};
 ///
 /// # Returns
 /// A vector of tuples `(start, end)` representing the split intervals.
-pub(crate) fn split_intervals(
-    start: DateTime<Utc>,
-    end: DateTime<Utc>,
-    interval: &Interval,
-) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+pub(crate) fn split_intervals(start: DateTime<Utc>, end: DateTime<Utc>, interval: &Interval) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
     let mut intervals = Vec::new();
     let mut current_start = start;
 
@@ -53,10 +49,7 @@ pub(crate) fn read_data_from_file(path: PathBuf) -> Result<Vec<Kline>> {
 /// This function is useful for resuming operations from the last saved point in case of errors.
 pub(crate) fn get_last_close_time_from_file(path: PathBuf) -> Result<DateTime<Utc>> {
     let klines = read_data_from_file(path)?;
-    klines
-        .last()
-        .map(|kline| kline.close_time())
-        .ok_or(anyhow::Error::msg("file is empty"))
+    klines.last().map(|kline| kline.close_time()).ok_or(anyhow::Error::msg("file is empty"))
 }
 
 pub(crate) fn write_data_to_file(path: PathBuf, klines: &[Kline]) -> Result<()> {
@@ -81,11 +74,7 @@ pub(crate) fn write_data_to_file(path: PathBuf, klines: &[Kline]) -> Result<()> 
 ///
 /// * `Ok(reqwest::Response)` - If the request succeeds within the allowed retries.
 /// * `Err(reqwest::Error)` - If all retry attempts fail, returns the last encountered error.
-pub(crate) async fn fetch_url(
-    url: &str,
-    retry: u8,
-    pause: u64,
-) -> Result<reqwest::Response, reqwest::Error> {
+pub(crate) async fn fetch_url(url: &str, retry: u8, pause: u64) -> Result<reqwest::Response, reqwest::Error> {
     let mut last_error = None;
 
     for attempt in 1..=retry {
