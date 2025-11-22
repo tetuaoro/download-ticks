@@ -30,6 +30,7 @@ use crate::utils::*;
 async fn main() -> anyhow::Result<()> {
     let cmd = Command::build()?;
     let market: &dyn Endpoint = match cmd.market {
+        Market::Gate => &Gate::build(&cmd),
         Market::Binance => &Binance::build(&cmd),
     };
     let urls = market.urls();
@@ -42,7 +43,20 @@ async fn main() -> anyhow::Result<()> {
             async move {
                 let response = client.get(url).send().map_err(Error::from).await?;
                 match cmd.market {
-                    Market::Binance => response.json::<Vec<BinanceKline>>().map_err(Error::from).await,
+                    Market::Gate => {
+                        response
+                            .json::<Vec<GateKline>>()
+                            .map_ok(|klines| klines.into_iter().map(AnyKline::Gate).collect::<Vec<_>>())
+                            .map_err(Error::from)
+                            .await
+                    }
+                    Market::Binance => {
+                        response
+                            .json::<Vec<BinanceKline>>()
+                            .map_ok(|klines| klines.into_iter().map(AnyKline::Binance).collect::<Vec<_>>())
+                            .map_err(Error::from)
+                            .await
+                    }
                 }
             }
         })

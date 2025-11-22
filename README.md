@@ -1,7 +1,7 @@
-# Binance Klines Fetcher
+# Exchanges Klines Fetcher
 
-A **command-line tool** to fetch and save historical candlestick (kline) data from Binance.
-Supports **pagination** to handle Binance's 1000-candle limit and saves data in **JSON format**.
+A **command-line tool** to fetch and save historical candlestick (kline) data from exchanges.
+Supports **pagination** to handle exchanges 1000-candle limit and saves data in **JSON format**.
 
 ---
 

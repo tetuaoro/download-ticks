@@ -9,12 +9,14 @@ use crate::errors::{Error, Result};
 /// Supported market to fetch the data.
 #[derive(Debug, Clone, ValueEnum)]
 pub enum Market {
+    Gate,
     Binance,
 }
 
 impl fmt::Display for Market {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Market::Gate => write!(f, "gate"),
             Market::Binance => write!(f, "binance"),
         }
     }
@@ -92,14 +94,7 @@ and optional start/end dates. The data is saved to a JSON file if --output-file 
 
 ## Supported Exchanges
 - Binance
-
-## Supported Intervals
-- Seconds: 1s
-- Minutes: 1m, 3m, 5m, 15m, 30m
-- Hours: 1h, 2h, 4h, 6h, 8h, 12h
-- Days: 1d, 3d
-- Weeks: 1w
-- Months: 1M
+- Gate.io
 
 Examples:
   Fetch 1-hour BTCUSDT klines for the last 1000 hours:
