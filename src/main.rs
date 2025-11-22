@@ -1,163 +1,67 @@
-//! A command-line tool to fetch and save Binance kline (candlestick) data.
+//! A command-line tool to fetch and save candlestick (kline) data from exchanges.
 //!
-//! This tool allows you to download historical candlestick data from Binance,
-//! split the time range into chunks (to respect Binance's 1000-candle limit),
+//! This tool allows you to download historical candlestick data from exchanges
+//! (e.g., Binance), split the time range into chunks (to respect API limits),
 //! and save the results to a JSON file.
+//!
+//! ## Features
+//! - Supports multiple exchanges.
+//! - Handles large time ranges by splitting them into smaller intervals.
+//! - Saves data in the original exchange format or a custom JSON structure.
+//!
+//! ## Usage
+//! The tool is designed to be flexible and easy to use. See the `cli` module for command-line options.
 
-mod data;
+mod cli;
+mod errors;
+mod market;
 mod utils;
 
-use std::fmt;
-use std::path::PathBuf;
+use futures::TryFutureExt;
+use futures::{StreamExt, stream};
+use reqwest::Client;
 
-use anyhow::Result;
-use chrono::{DateTime, Duration, Utc};
-use clap::{Parser, ValueEnum};
-
-use crate::data::*;
+use crate::cli::*;
+use crate::errors::*;
+use crate::market::*;
 use crate::utils::*;
 
-/// Supported time intervals for Binance klines.
-#[derive(Debug, Clone, ValueEnum)]
-enum Interval {
-    /// 1 minute
-    M1,
-    /// 1 hour
-    H1,
-    /// 1 day
-    D1,
-}
-
-impl fmt::Display for Interval {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Interval::M1 => write!(f, "1m"),
-            Interval::H1 => write!(f, "1h"),
-            Interval::D1 => write!(f, "1d"),
-        }
-    }
-}
-
-/// Command-line arguments for the program.
-#[derive(Debug, Clone, Parser)]
-#[command(
-    version,
-    about,
-    long_about = "
-This tool fetches historical candlestick data from Binance's API.
-You can specify a symbol (e.g., BTCUSDT), time interval (1m, 1h, 1d),
-and optional start/end dates. The data is saved to a JSON file if --output-file is provided.
-
-Examples:
-  Fetch 1-hour BTCUSDT klines for the last 1000 hours:
-    $ download-ticks -s BTCUSDT -i h1
-
-  Fetch 1-minute BTCUSDT klines from Jan 1, 2019, to Mar 1, 2019, and save to output.json:
-    $ download-ticks -s BTCUSDT -i m1 --from-date '2019-01-01T00:00:00Z' --to-date '2019-03-01T00:00:00Z' -o output.json
-"
-)]
-struct Command {
-    /// The trading pair symbol (e.g., BTCUSDT, ETHUSDT).
-    #[arg(short, long)]
-    symbol: String,
-
-    /// The time interval for klines (1m, 1h, 1d).
-    #[arg(short, long)]
-    interval: Interval,
-
-    /// Start date for fetching klines (UTC, RFC 3339 format).
-    #[arg(short, long)]
-    from_date: Option<DateTime<Utc>>,
-
-    /// End date for fetching klines (UTC, RFC 3339 format).
-    #[arg(short, long)]
-    to_date: Option<DateTime<Utc>>,
-
-    /// Output file path to save the klines in JSON format.
-    #[arg(short, long)]
-    output_file: Option<PathBuf>,
-
-    /// Re-try to get ticks from marketplace.
-    #[arg(short, long, default_value = "3")]
-    retry_counter: u8,
-
-    /// Print progress status.Usefull if you get `from` and `to` dates.
-    #[arg(short, long)]
-    verbose: bool,
-}
-
-/// Base URL for API endpoint.
-const BASE_URL: &str = "https://api.binance.com/api/v3/klines";
-
 #[tokio::main]
-async fn main() -> Result<()> {
-    let cmd = Command::parse();
+async fn main() -> anyhow::Result<()> {
+    let cmd = Command::build()?;
+    let market: &dyn Endpoint = match cmd.market {
+        Market::Binance => &Binance::build(&cmd),
+    };
+    let urls = market.urls();
 
-    let symbol = format!("symbol={}", cmd.symbol);
-    let interval = format!("interval={}", cmd.interval);
-
-    let mut url = format!("{BASE_URL}?{symbol}&{interval}&limit=1000");
-    let mut klines = vec![];
-
-    if let Some(path) = cmd.output_file.clone() {
-        if let Ok(k) = read_data_from_file(path) {
-            let n = k.len();
-            klines = k;
-            if cmd.verbose {
-                println!("len of previous data: {n}");
-            }
-        }
-    }
-
-    if let (Some(mut start), Some(end)) = (cmd.from_date, cmd.to_date) {
-        let url_cloned = url.clone();
-
-        if let Some(path) = cmd.output_file.clone() {
-            if let Ok(last_close_time) = get_last_close_time_from_file(path) {
-                let plus_duration = match cmd.interval {
-                    Interval::M1 => Duration::minutes(1),
-                    Interval::H1 => Duration::hours(1),
-                    Interval::D1 => Duration::days(1),
-                };
-                start = last_close_time + plus_duration;
-                if cmd.verbose {
-                    println!("start from last close time {last_close_time} => {start}");
+    let client = Client::new();
+    let klines_stream = stream::iter(&urls)
+        .map(|url| {
+            let client = &client;
+            let cmd = &cmd;
+            async move {
+                let response = client.get(url).send().map_err(Error::from).await?;
+                match cmd.market {
+                    Market::Binance => response.json::<Vec<BinanceKline>>().map_err(Error::from).await,
                 }
             }
-        }
+        })
+        .buffered(90);
 
-        let intervals = split_intervals(start, end, &cmd.interval);
-        let intervals_len = intervals.len();
-        let mut progress = 1;
-
-        for (start, end) in intervals {
-            url = format!("{url_cloned}&startTime={}&endTime={}", start.timestamp_micros(), end.timestamp_micros());
-
-            let response = fetch_url(&url, cmd.retry_counter, 3).await?;
-            let mut data = response.json::<Vec<Kline>>().await?;
-            klines.append(&mut data);
-
-            if let Some(path) = cmd.output_file.clone() {
-                if let Err(e) = write_data_to_file(path, &klines) {
-                    eprintln!("{e}");
-                }
+    let mut all_klines = Vec::with_capacity(urls.len() * 1000);
+    all_klines = klines_stream
+        .fold(all_klines, |mut arr, result| async {
+            match result {
+                Ok(klines) => arr.extend(klines),
+                Err(e) => eprintln!("{e}"),
             }
+            arr
+        })
+        .await;
 
-            if cmd.verbose {
-                let percent = progress as f64 * 100.0 / intervals_len as f64;
-                println!("{progress}/{intervals_len} ({percent:.3}%)");
-                progress += 1;
-            }
-        }
-    } else {
-        let response = fetch_url(&url, cmd.retry_counter, 3).await?;
-        let mut data = response.json::<Vec<Kline>>().await?;
-        klines.append(&mut data);
-        if let Some(path) = cmd.output_file {
-            if let Err(e) = write_data_to_file(path, &klines) {
-                eprintln!("{e}");
-            }
-        }
+    if let Some(filepath) = cmd.output_file {
+        let klines = all_klines.iter().map(|k| k.format()).collect::<Vec<_>>();
+        write_to_file(filepath, &klines)?;
     }
 
     Ok(())
