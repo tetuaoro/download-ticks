@@ -132,9 +132,9 @@ pub struct Command {
     // #[arg(short, long, default_value = "3")]
     // pub retry_counter: u8,
 
-    // /// Print progress status. Usefull if you get `from` and `to` dates.
-    // #[arg(short, long)]
-    // pub verbose: bool,
+    /// Print progress status. Usefull if you get `from` and `to` dates.
+    #[arg(short, long)]
+    pub verbose: bool,
 }
 
 impl Command {

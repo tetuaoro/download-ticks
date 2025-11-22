@@ -19,6 +19,7 @@ mod utils;
 
 use futures::TryFutureExt;
 use futures::{StreamExt, stream};
+use indicatif::ProgressBar;
 use reqwest::Client;
 
 use crate::cli::*;
@@ -34,6 +35,18 @@ async fn main() -> anyhow::Result<()> {
         Market::Binance => &Binance::build(&cmd),
     };
     let urls = market.urls();
+
+    let progress_bar = if cmd.verbose {
+        let pb = ProgressBar::new(urls.len() as u64);
+        pb.set_style(
+            indicatif::ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
+                .unwrap()
+                .progress_chars("#>-"),
+        );
+        Some(pb)
+    } else {
+        None
+    };
 
     let client = Client::new();
     let klines_stream = stream::iter(&urls)
@@ -66,7 +79,12 @@ async fn main() -> anyhow::Result<()> {
     all_klines = klines_stream
         .fold(all_klines, |mut arr, result| async {
             match result {
-                Ok(klines) => arr.extend(klines),
+                Ok(klines) => {
+                    arr.extend(klines);
+                    if let Some(pb) = &progress_bar {
+                        pb.inc(1);
+                    }
+                }
                 Err(e) => eprintln!("{e}"),
             }
             arr
@@ -76,6 +94,10 @@ async fn main() -> anyhow::Result<()> {
     if let Some(filepath) = cmd.output_file {
         let klines = all_klines.iter().map(|k| k.format()).collect::<Vec<_>>();
         write_to_file(filepath, &klines)?;
+    }
+
+    if cmd.verbose {
+        println!("Download ticks done.");
     }
 
     Ok(())
