@@ -4,7 +4,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{from_reader, to_writer};
 
-use crate::{Error, Interval, Kline, Result};
+use crate::{Error, Interval, Result};
 
 /// Splits a time range into intervals suitable for Binance's API (max 1000 candles per request).
 ///
@@ -50,29 +50,20 @@ pub fn split_intervals(start: DateTime<Utc>, end: DateTime<Utc>, interval: &Inte
 }
 
 /// Reads candlestick data from a file containing serialized Kline data.
-pub fn _read_data_from_file<T>(path: PathBuf) -> Result<Vec<T>>
+pub fn read_data_from_file<T>(path: &PathBuf) -> Result<Vec<T>>
 where
     T: DeserializeOwned,
 {
-    let file = File::open(&path)?;
+    let file = File::open(path)?;
     let reader = BufReader::new(file);
     from_reader(reader).map_err(Error::from)
 }
 
-/// This function is useful for resuming operations from the last saved point in case of errors.
-pub fn _get_last_close_time_from_file<T>(path: PathBuf) -> Result<DateTime<Utc>>
-where
-    T: DeserializeOwned + Kline,
-{
-    let klines = _read_data_from_file::<T>(path)?;
-    klines.last().map(|kline| kline.close_time()).ok_or(Error::DataFileEmpty)
-}
-
 /// Writes candlestick data to a file.
-pub fn write_to_file<T>(path: PathBuf, klines: &[T]) -> Result<()>
+pub fn write_to_file<T>(path: &PathBuf, klines: &[T]) -> Result<()>
 where
     T: Serialize,
 {
-    let file = File::create(&path)?;
+    let file = File::create(path)?;
     to_writer(file, &klines).map_err(Error::from)
 }

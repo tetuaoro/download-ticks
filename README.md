@@ -10,19 +10,25 @@ Supports **pagination** to handle exchanges 1000-candle limit and saves data in 
 1. Fetch last candles
 
 ```bash
-download-ticks --symbol BTCUSDT --interval H1
+download-ticks fetch --symbol BTCUSDT --interval H1
 ```
 
 2. Fetch the candles for a range
 
 ```bash
-download-ticks -s BTCUSDT -i H1 --from-date "2019-05-01T00:00:00Z" --to-date "2019-05-02T00:00:00Z"
+download-ticks fetch -s BTCUSDT -i H1 --from-date "2019-05-01T00:00:00Z" --to-date "2019-05-02T00:00:00Z"
 ```
 
 3. Fetch the candles for a range and save to a json file
 
 ```bash
-download-ticks -s BTCUSDT -i H1 -f "2019-05-01T00:00:00Z" -t "2019-05-02T00:00:00Z" --output-file output.json
+download-ticks fetch -s BTCUSDT -i H1 -f "2019-05-01T00:00:00Z" -t "2019-05-02T00:00:00Z" --output-file output.json
+```
+
+3. Show information from a json file
+
+```bash
+download-ticks info -f output.json
 ```
 
 ## **Contributing**

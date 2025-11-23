@@ -2,11 +2,13 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    #[allow(unused)]
-    #[error("Data from file is empty")]
-    DataFileEmpty,
+    #[error("Check the first/last kline data.")]
+    MissingData,
 
-    #[error("Invalid given datetime")]
+    #[error("Unable to read you input file. Make sure it is json kline valid data.")]
+    InvalidFile,
+
+    #[error("Invalid given datetime.")]
     InvalidDatetime,
 
     #[error("{0}")]

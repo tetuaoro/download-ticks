@@ -77,6 +77,10 @@ pub struct BinanceKline {
 impl Kline for BinanceKline {
     type Output = Vec<Value>;
 
+    fn open_time(&self) -> DateTime<Utc> {
+        self.open_time
+    }
+
     fn close_time(&self) -> DateTime<Utc> {
         self.close_time
     }

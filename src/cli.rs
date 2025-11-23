@@ -2,7 +2,7 @@ use std::fmt;
 use std::path::PathBuf;
 
 use chrono::{DateTime, Utc};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand, ValueEnum};
 
 use crate::errors::{Error, Result};
 
@@ -98,12 +98,47 @@ and optional start/end dates. The data is saved to a JSON file if --output-file 
 
 Examples:
   Fetch 1-hour BTCUSDT klines for the last 1000 hours:
-    $ download-ticks -s BTCUSDT -i h1
+    $ download-ticks fetch -s BTCUSDT -i h1
 
   Fetch 1-minute BTCUSDT klines from Jan 1, 2019, to Mar 1, 2019, and save to output.json:
-    $ download-ticks -s BTCUSDT -i m1 --from-date '2019-01-01T00:00:00Z' --to-date '2019-03-01T00:00:00Z' -o output.json
+    $ download-ticks fetch -s BTCUSDT -i m1 --from-date '2019-01-01T00:00:00Z' --to-date '2019-03-01T00:00:00Z' -o output.json
+
+  Show information of output.json file:
+    $ download-ticks info -f output.json
 "
 )]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Commands,
+}
+
+impl Cli {
+    pub fn build() -> Result<Self> {
+        let cmd = Self::parse();
+        match &cmd.command {
+            Commands::Fetch(cmd) => {
+                if let (Some(from_date), Some(to_date)) = (cmd.from_date, cmd.to_date) {
+                    if to_date < from_date {
+                        return Err(Error::InvalidDatetime);
+                    }
+                }
+            }
+            _ => (),
+        }
+        Ok(cmd)
+    }
+}
+
+#[derive(Debug, Clone, Subcommand)]
+pub enum Commands {
+    /// Fetch klines from an exchange.
+    Fetch(Command),
+    /// Display information about a JSON file containing klines.
+    Info(InfoCommand),
+}
+
+/// Command-line arguments for fetching klines.
+#[derive(Debug, Clone, Parser)]
 pub struct Command {
     /// The market to fetch the data (e.g., binance).
     #[arg(short, long, default_value_t = Market::Binance)]
@@ -131,20 +166,15 @@ pub struct Command {
     // /// Re-try to get ticks from marketplace.
     // #[arg(short, long, default_value = "3")]
     // pub retry_counter: u8,
-
     /// Print progress status. Usefull if you get `from` and `to` dates.
     #[arg(short, long)]
     pub verbose: bool,
 }
 
-impl Command {
-    pub fn build() -> Result<Self> {
-        let cmd = Self::parse();
-        if let (Some(from_date), Some(to_date)) = (cmd.from_date, cmd.to_date) {
-            if to_date < from_date {
-                return Err(Error::InvalidDatetime);
-            }
-        }
-        Ok(cmd)
-    }
+/// Command-line arguments for displaying information about a JSON file.
+#[derive(Debug, Clone, Parser)]
+pub struct InfoCommand {
+    /// Path to the JSON file containing klines.
+    #[arg(short = 'f', long)]
+    pub input_file: PathBuf,
 }

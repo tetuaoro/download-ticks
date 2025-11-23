@@ -70,6 +70,10 @@ pub struct GateKline {
 impl Kline for GateKline {
     type Output = Vec<Value>;
 
+    fn open_time(&self) -> DateTime<Utc> {
+        self.time
+    }
+
     fn close_time(&self) -> DateTime<Utc> {
         self.time
     }

@@ -10,10 +10,9 @@ use serde_json::{Value, to_value};
 pub trait Kline {
     type Output;
 
-    #[allow(unused)]
+    fn open_time(&self) -> DateTime<Utc>;
     fn close_time(&self) -> DateTime<Utc>;
     fn to_value(&self) -> Self::Output;
-
 }
 
 pub trait Endpoint<'m> {
@@ -27,6 +26,13 @@ pub enum AnyKline {
 
 impl Kline for AnyKline {
     type Output = Value;
+
+    fn open_time(&self) -> DateTime<Utc> {
+        match self {
+            AnyKline::Gate(k) => k.open_time(),
+            AnyKline::Binance(k) => k.open_time(),
+        }
+    }
 
     fn close_time(&self) -> DateTime<Utc> {
         match self {
