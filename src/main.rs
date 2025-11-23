@@ -19,7 +19,7 @@ mod utils;
 
 use futures::TryFutureExt;
 use futures::{StreamExt, stream};
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 
 use crate::cli::*;
@@ -39,8 +39,7 @@ async fn main() -> anyhow::Result<()> {
     let progress_bar = if cmd.verbose {
         let pb = ProgressBar::new(urls.len() as u64);
         pb.set_style(
-            indicatif::ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})")
-                .unwrap()
+            ProgressStyle::with_template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} ({eta})\n{msg}")?
                 .progress_chars("#>-"),
         );
         Some(pb)
@@ -53,8 +52,12 @@ async fn main() -> anyhow::Result<()> {
         .map(|url| {
             let client = &client;
             let cmd = &cmd;
+            let progress_bar = &progress_bar;
             async move {
                 let response = client.get(url).send().map_err(Error::from).await?;
+                if let Some(pb) = progress_bar {
+                    pb.inc(1);
+                }
                 match cmd.market {
                     Market::Gate => {
                         response
@@ -80,23 +83,30 @@ async fn main() -> anyhow::Result<()> {
         .fold(all_klines, |mut arr, result| async {
             match result {
                 Ok(klines) => {
-                    arr.extend(klines);
                     if let Some(pb) = &progress_bar {
                         pb.inc(1);
                     }
+                    arr.extend(klines);
                 }
-                Err(e) => eprintln!("{e}"),
+                Err(e) => {
+                    if let Some(pb) = &progress_bar {
+                        pb.abandon_with_message(e.to_string());
+                    } else {
+                        eprintln!("{e}");
+                    }
+                }
             }
             arr
         })
         .await;
 
     if let Some(filepath) = cmd.output_file {
-        let klines = all_klines.iter().map(|k| k.format()).collect::<Vec<_>>();
+        let klines = all_klines.iter().map(|k| k.to_value()).collect::<Vec<_>>();
         write_to_file(filepath, &klines)?;
     }
-
-    if cmd.verbose {
+    if let Some(pb) = &progress_bar {
+        pb.finish_with_message("Download ticks done.");
+    } else {
         println!("Download ticks done.");
     }
 

@@ -75,11 +75,13 @@ pub struct BinanceKline {
 }
 
 impl Kline for BinanceKline {
+    type Output = Vec<Value>;
+
     fn close_time(&self) -> DateTime<Utc> {
         self.close_time
     }
 
-    fn format(&self) -> Vec<Value> {
+    fn to_value(&self) -> Self::Output {
         vec![
             self.open_time.timestamp_millis().into(),
             self.open_price.into(),

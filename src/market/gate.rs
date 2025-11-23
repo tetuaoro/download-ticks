@@ -68,11 +68,13 @@ pub struct GateKline {
 }
 
 impl Kline for GateKline {
+    type Output = Vec<Value>;
+
     fn close_time(&self) -> DateTime<Utc> {
         self.time
     }
 
-    fn format(&self) -> Vec<Value> {
+    fn to_value(&self) -> Self::Output {
         vec![
             self.time.timestamp_millis().into(),
             self.quote_volume.into(),
