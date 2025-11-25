@@ -1,6 +1,7 @@
+#![allow(unused)]
+
 use chrono::{DateTime, Utc, serde::ts_milliseconds};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Deserialize;
 use serde_this_or_that::{as_f64, as_u64};
 
 use super::{Endpoint, Kline};
@@ -46,7 +47,7 @@ impl<'b> Endpoint<'b> for Binance<'b> {
 }
 
 /// Represents a single candlestick (kline) from binance.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct BinanceKline {
     #[serde(rename = "0", with = "ts_milliseconds")]
     open_time: DateTime<Utc>,
@@ -75,30 +76,11 @@ pub struct BinanceKline {
 }
 
 impl Kline for BinanceKline {
-    type Output = Vec<Value>;
-
     fn open_time(&self) -> DateTime<Utc> {
         self.open_time
     }
 
     fn close_time(&self) -> DateTime<Utc> {
         self.close_time
-    }
-
-    fn to_value(&self) -> Self::Output {
-        vec![
-            self.open_time.timestamp_millis().into(),
-            self.open_price.into(),
-            self.high_price.into(),
-            self.low_price.into(),
-            self.close_price.into(),
-            self.volume.into(),
-            self.close_time.timestamp_millis().into(),
-            self.quote_asset_volume.into(),
-            self.number_of_trades.into(),
-            self.taker_buy_base_volume.into(),
-            self.taker_buy_quote_volume.into(),
-            self.ignore.into(),
-        ]
     }
 }

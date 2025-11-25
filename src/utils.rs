@@ -15,7 +15,7 @@ use crate::{Error, Interval, Result};
 ///
 /// # Returns
 /// A vector of tuples `(start, end)` representing the split intervals.
-pub fn split_intervals(start: DateTime<Utc>, end: DateTime<Utc>, interval: &Interval) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
+pub(crate) fn split_intervals(start: DateTime<Utc>, end: DateTime<Utc>, interval: &Interval) -> Vec<(DateTime<Utc>, DateTime<Utc>)> {
     let mut intervals = Vec::new();
     let mut current_start = start;
 
@@ -50,7 +50,7 @@ pub fn split_intervals(start: DateTime<Utc>, end: DateTime<Utc>, interval: &Inte
 }
 
 /// Reads candlestick data from a file containing serialized Kline data.
-pub fn read_data_from_file<T>(path: &PathBuf) -> Result<Vec<T>>
+pub(crate) fn read_data_from_file<T>(path: &PathBuf) -> Result<Vec<T>>
 where
     T: DeserializeOwned,
 {
@@ -60,7 +60,7 @@ where
 }
 
 /// Writes candlestick data to a file.
-pub fn write_to_file<T>(path: &PathBuf, klines: &[T]) -> Result<()>
+pub(crate) fn write_to_file<T>(path: &PathBuf, klines: &[T]) -> Result<()>
 where
     T: Serialize,
 {

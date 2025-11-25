@@ -19,4 +19,7 @@ pub enum Error {
 
     #[error("{0}")]
     SerdeJson(#[from] serde_json::Error),
+
+    #[error("{0}")]
+    Indicatif(#[from] indicatif::style::TemplateError),
 }

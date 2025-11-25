@@ -4,6 +4,8 @@ version = "1.6.0"
 edition = "2024"
 authors = ["tetuaoro <65575727+tetuaoro@users.noreply.github.com>"]
 description = "Fetch market candlestick data (kline) and save to a JSON file."
+repository = "https://github.com/tetuaoro/download-ticks"
+documentation = "https://docs.rs/crate/download-ticks/latest"
 license = "MIT"
 
 [dependencies]

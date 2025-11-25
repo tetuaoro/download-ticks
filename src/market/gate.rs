@@ -1,6 +1,7 @@
+#![allow(unused)]
+
 use chrono::{DateTime, Utc, serde::ts_seconds};
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde::Deserialize;
 use serde_this_or_that::as_f64;
 
 use super::{Endpoint, Kline};
@@ -48,7 +49,7 @@ impl<'b> Endpoint<'b> for Gate<'b> {
 }
 
 /// Represents a single candlestick (kline) from Gate.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct GateKline {
     #[serde(rename = "0", with = "ts_seconds")]
     time: DateTime<Utc>,
@@ -68,26 +69,11 @@ pub struct GateKline {
 }
 
 impl Kline for GateKline {
-    type Output = Vec<Value>;
-
     fn open_time(&self) -> DateTime<Utc> {
         self.time
     }
 
     fn close_time(&self) -> DateTime<Utc> {
         self.time
-    }
-
-    fn to_value(&self) -> Self::Output {
-        vec![
-            self.time.timestamp_millis().into(),
-            self.quote_volume.into(),
-            self.close_price.into(),
-            self.high_price.into(),
-            self.low_price.into(),
-            self.open_price.into(),
-            self.base_volume.into(),
-            self.window.into(),
-        ]
     }
 }
