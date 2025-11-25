@@ -11,14 +11,12 @@
 //!
 //! ## Usage
 //! The tool is designed to be flexible and easy to use. See the `cli` module for command-line options.
-#![warn(missing_docs)]
 
 mod cli;
 mod errors;
 mod market;
 mod utils;
 
-use chrono::{DateTime, Utc};
 use futures::TryFutureExt;
 use futures::{StreamExt, stream};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -41,46 +39,86 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_info(data_len: usize, open_time: DateTime<Utc>, close_time: DateTime<Utc>) {
+/// Prints information about a collection of klines.
+///
+/// This function prints the number of elements, the start time, and the end time of the klines.
+///
+/// # Arguments
+/// * `data` - A slice of klines implementing the `Kline` trait.
+///
+/// # Errors
+/// Returns an error if the data slice is empty.
+fn print_info<T: Kline>(data: &[T]) -> Result<()> {
+    let first_k = data.first().ok_or(Error::MissingData)?;
+    let last_k = data.last().ok_or(Error::MissingData)?;
+    let n = data.len();
+    let duration = last_k.close_time() - first_k.open_time();
+
+    let days = duration.num_days();
+    let hours = duration.num_hours();
+    let minutes = duration.num_minutes();
+
+    let duration = if minutes > 0 {
+        format!("{}D / {}H / {}m", separator(days, "_")?, separator(hours, "_")?, separator(minutes, "_")?)
+    } else if hours > 0 {
+        format!("{}D / {}H", separator(days, "_")?, separator(hours, "_")?)
+    } else {
+        format!("{}D", separator(days, "_")?)
+    };
+
     println!(
         "
 ========================
-Number of elements: {data_len}
-
-It was started from {open_time},
-and ended to {close_time}.
+Number of elements: {n}
+Duration: {duration}
+It started from {open_time},
+and ended at {close_time}.
 ========================
-"
+",
+        open_time = first_k.open_time(),
+        close_time = last_k.close_time()
     );
-}
 
-fn info(cmd: &InfoCommand) -> Result<()> {
-    let filepath = &cmd.input_file;
-    if let Ok(data) = read_data_from_file::<BinanceKline>(filepath) {
-        let first_k = data.first().ok_or(Error::MissingData)?;
-        let first_open_time = first_k.open_time();
-        let last_k = data.last().ok_or(Error::MissingData)?;
-        let last_close_time = last_k.close_time();
-        let n = data.len();
-        print_info(n, first_open_time, last_close_time);
-    } else {
-        let data = read_data_from_file::<GateKline>(filepath).map_err(|_| Error::InvalidFile)?;
-        let first_k = data.first().ok_or(Error::MissingData)?;
-        let first_open_time = first_k.open_time();
-        let last_k = data.last().ok_or(Error::MissingData)?;
-        let last_close_time = last_k.close_time();
-        let n = data.len();
-        print_info(n, first_open_time, last_close_time);
-    }
     Ok(())
 }
 
+/// Displays information about a JSON file containing klines.
+///
+/// This function reads the file, parses the klines, and prints information such as the number of elements,
+/// the start time, and the end time.
+///
+/// # Arguments
+/// * `cmd` - A reference to the info command configuration.
+///
+/// # Errors
+/// Returns an error if the file cannot be read or parsed.
+fn info(cmd: &InfoCommand) -> Result<()> {
+    let filepath = &cmd.input_file;
+    if let Ok(data) = read_data_from_file::<BinanceKline>(filepath) {
+        return print_info(&data);
+    }
+    if let Ok(data) = read_data_from_file::<GateKline>(filepath) {
+        return print_info(&data);
+    }
+
+    Err(Error::InvalidFile)
+}
+
+/// Fetches klines data from the specified exchange.
+///
+/// # Arguments
+/// * `cmd` - A reference to the command configuration.
+///
+/// # Errors
+/// Returns an error if the fetch operation fails.
 async fn fetch(cmd: &Command) -> Result<()> {
     let market: &dyn Endpoint = match cmd.market {
         Market::Gate => &Gate::build(&cmd),
         Market::Binance => &Binance::build(&cmd),
     };
     let urls = market.urls();
+
+    println!("{}", urls[0]);
 
     let progress_bar = if cmd.verbose {
         let pb = ProgressBar::new(urls.len() as u64);
@@ -117,8 +155,6 @@ async fn fetch(cmd: &Command) -> Result<()> {
                 Err(e) => {
                     if let Some(pb) = &progress_bar {
                         pb.abandon_with_message(e.to_string());
-                    } else {
-                        eprintln!("{e}");
                     }
                 }
             }

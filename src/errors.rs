@@ -1,5 +1,6 @@
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// Custom error type for the application.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("Check the first/last kline data.")]
@@ -22,4 +23,10 @@ pub enum Error {
 
     #[error("{0}")]
     Indicatif(#[from] indicatif::style::TemplateError),
+
+    #[error("{0}")]
+    Str(#[from] std::str::Utf8Error),
+
+    #[error("{0}")]
+    Parse(#[from] std::num::ParseIntError),
 }

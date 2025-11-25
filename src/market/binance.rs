@@ -7,6 +7,7 @@ use serde_this_or_that::{as_f64, as_u64};
 use super::{Endpoint, Kline};
 use crate::{cli::Command, utils::split_intervals};
 
+/// A wrapper for the Binance exchange configuration.
 pub struct Binance<'b>(&'b Command);
 
 impl<'b> Binance<'b> {
